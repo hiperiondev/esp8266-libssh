@@ -232,7 +232,7 @@ static ssh_channel channel_open(ssh_session session, void *userdata) {
 static void incoming_connection(ssh_bind sshbind, void *userdata) {
     struct server_ctx *sc = (struct server_ctx*) userdata;
     long t = 0;
-    struct client_ctx *cc = (struct client_ctx *) calloc(1, sizeof(struct client_ctx));
+    struct client_ctx *cc = (struct client_ctx *) SSH_CALLOC(1, sizeof(struct client_ctx));
 
     cc->cc_session = ssh_new();
     if (ssh_bind_accept(sshbind, cc->cc_session) == SSH_ERROR) {
@@ -255,7 +255,7 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     ssh_event_add_session(sc->sc_sshevent, cc->cc_session);
     return;
     cleanup: ssh_free(cc->cc_session);
-    free(cc);
+    SSH_FREE(cc);
 }
 
 static void dead_eater(struct server_ctx *sc) {
@@ -266,7 +266,7 @@ static void dead_eater(struct server_ctx *sc) {
     SLIST_FOREACH(cc, &sc->sc_client_head, cc_client_list)
     {
         if (cc_removed) {
-            free(cc_removed);
+        	SSH_FREE(cc_removed);
             cc_removed = NULL;
         }
         status = ssh_get_status(cc->cc_session);
@@ -281,7 +281,7 @@ static void dead_eater(struct server_ctx *sc) {
         }
     }
     if (cc_removed) {
-        free(cc_removed);
+    	SSH_FREE(cc_removed);
         cc_removed = NULL;
     }
 }
@@ -340,7 +340,7 @@ static void terminate_server(struct server_ctx *sc) {
         dead_eater(sc);
     }
     ssh_bind_free(sc->sc_sshbind);
-    free(sc);
+    SSH_FREE(sc);
 }
 
 int sshd_main(struct server_ctx *sc) {
