@@ -29,8 +29,8 @@
 
 #define TAG "app_main"
 
-#define SSID     "test"
-#define PASSWORD "test"
+#define SSID     "FliaBravo"
+#define PASSWORD "fliaiiv900"
 
 #define WIFI_MAXIMUM_RETRY 3
 #define WIFI_CONNECTED_BIT BIT0

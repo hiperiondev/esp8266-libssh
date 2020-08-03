@@ -51,11 +51,11 @@ static void minicli_command_noop(struct interactive_session *is) {
 }
 
 static const char banner[] = "\r\n"
-		 " _  _       _  _       __      __          _     _ \r\n"
-		 "| || | ___ | || | ___  \ \    / /___  _ _ | | __| |\r\n"
-		 "| __ |/ -_)| || |/ _ \  \ \/\/ // _ \| '_|| |/ _` |\r\n"
-		 "|_||_|\___||_||_|\___/   \_/\_/ \___/|_|  |_|\__,_|\r\n"
-		"Welcome to minicli! Type ^D to exit and 'help' for help.\r\n";
+        " _  _       _  _       __      __          _     _ \r\n"
+        "| || |  ___ | || | ___  \\ \\    / /___  _ _ | | __| |\r\n"
+        "| __ |/ -_)| || |/  _ \\  \\ \\/\\/ // _ \\| '_|| |/ _` |\r\n"
+        "|_||_|\\___||_||_|\\___/   \\_/  _/ \\___/|_|  |_|\\__,_|\r\n"
+        "Welcome to minicli! Type ^D to exit and 'help' for help.\r\n";
 
 static void minicli_command_banner(struct interactive_session *is) {
 	int n = 0;
