@@ -25,11 +25,12 @@
 #include "esp_err.h"
 #include "esp_wifi.h"
 #include "sshd.h"
+#include "esp_sleep.h"
 
 #define TAG "app_main"
 
-#define SSID     "ssid_test"
-#define PASSWORD "passwd_test"
+#define SSID     "test"
+#define PASSWORD "test"
 
 #define WIFI_MAXIMUM_RETRY 3
 #define WIFI_CONNECTED_BIT BIT0

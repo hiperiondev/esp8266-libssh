@@ -126,7 +126,7 @@ struct ssh_buffer_struct *ssh_buffer_new(void)
     }
 
     /*
-     * Always pSSH_REALLOCate 64 bytes.
+     * Always preallocate 64 bytes.
      *
      * -1 for ralloc_buffer magic.
      */

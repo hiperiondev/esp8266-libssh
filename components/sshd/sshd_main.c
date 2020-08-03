@@ -12,7 +12,10 @@
 #include "sshd_main.h"
 static const char *TAG = "sshd_task";
 
+ssh_session local_session;
+
 static void handle_char_from_local(struct interactive_session*, char);
+static void sendtochannel(struct interactive_session *is, char *c, int len);
 
 struct ssh_poll_handle_struct* ssh_bind_get_poll(struct ssh_bind_struct*);
 int ssh_event_add_poll(ssh_event event, struct ssh_poll_handle_struct*);
@@ -70,8 +73,7 @@ static int import_embedded_host_key(ssh_bind sshbind, const char *base64_key) {
     return error;
 }
 
-static struct client_ctx*
-lookup_client(struct server_ctx *sc, ssh_session session) {
+static struct client_ctx* lookup_client(struct server_ctx *sc, ssh_session session) {
     struct client_ctx *ret;
 
     SLIST_FOREACH(ret, &sc->sc_client_head, cc_client_list)
@@ -175,7 +177,8 @@ static int shell_request(ssh_session session, ssh_channel channel, void *userdat
     if (cc->cc_didshell)
         return SSH_ERROR;
     cc->cc_didshell = true;
-    cc->cc_is.is_handle_char_from_local = handle_char_from_local;
+    //cc->cc_is.is_handle_char_from_local = handle_char_from_local;
+    cc->cc_is.is_handle_char_from_local = sendtochannel;
     cc->cc_begin_interactive_session(&cc->cc_is);
     return SSH_OK;
 }
@@ -185,7 +188,8 @@ static int exec_request(ssh_session session, ssh_channel channel, const char *co
     struct client_ctx *cc = (struct client_ctx*) userdata;
     if (cc->cc_didshell)
         return SSH_ERROR;
-    cc->cc_is.is_handle_char_from_local = handle_char_from_local;
+    //cc->cc_is.is_handle_char_from_local = handle_char_from_local;
+    cc->cc_is.is_handle_char_from_local = sendtochannel;
     minicli_handle_command(&cc->cc_is, command);
     ssh_channel_send_eof(channel);
     ssh_channel_close(channel);
@@ -235,6 +239,7 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     struct client_ctx *cc = (struct client_ctx *) SSH_CALLOC(1, sizeof(struct client_ctx));
 
     cc->cc_session = ssh_new();
+    local_session  = cc->cc_session; //TODO: test
     if (ssh_bind_accept(sshbind, cc->cc_session) == SSH_ERROR) {
         goto cleanup;
     }
@@ -336,7 +341,7 @@ static void terminate_server(struct server_ctx *sc) {
         ssh_silent_disconnect(cc->cc_session);
     }
     while (!SLIST_EMPTY(&sc->sc_client_head)) {
-        (void) ssh_event_dopoll(sc->sc_sshevent, 100);
+        (void) ssh_event_dopoll(sc->sc_sshevent, -1);
         dead_eater(sc);
     }
     ssh_bind_free(sc->sc_sshbind);
@@ -361,9 +366,8 @@ int sshd_main(struct server_ctx *sc) {
     if (create_new_server(sc) != SSH_OK)
         return SSH_ERROR;
     while (!time_to_die) {
-        error = ssh_event_dopoll(sc->sc_sshevent, 1000);
+        error = ssh_event_dopoll(sc->sc_sshevent, -1);
         if (error == SSH_ERROR || error == SSH_AGAIN) {
-            // check if any clients are dead and consume 'em
             dead_eater(sc);
         }
     }
@@ -375,8 +379,8 @@ int sshd_main(struct server_ctx *sc) {
     return SSH_OK;
 }
 
-static void handle_char_from_local(struct interactive_session *is, char c) {
-    struct client_ctx *cc = (struct client_ctx*) ((uintptr_t) is
-            - offsetof(struct client_ctx, cc_is));
-    ssh_channel_write(cc->cc_channel, &c, 1);
+static void sendtochannel(struct interactive_session *is, char *c, int len) {
+	struct client_ctx *cc = (struct client_ctx*) ((uintptr_t) is
+	            - offsetof(struct client_ctx, cc_is));
+		ssh_channel_write(cc->cc_channel, c, len);
 }

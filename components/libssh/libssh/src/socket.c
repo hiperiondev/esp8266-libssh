@@ -761,7 +761,6 @@ int ssh_socket_buffered_write_bytes(ssh_socket s)
     if (s==NULL || s->out_buffer == NULL) {
         return 0;
     }
-
     return ssh_buffer_get_len(s->out_buffer);
 }
 

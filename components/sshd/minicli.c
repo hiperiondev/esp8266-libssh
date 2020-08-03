@@ -2,6 +2,11 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <libssh/libssh.h>
+#include <libssh/server.h>
+#include <libssh/callbacks.h>
 #include "sshd.h"
 
 char next_command[16];
@@ -35,41 +40,30 @@ struct minicli_command minicli_commands[] = {
 
 void minicli_printf(struct interactive_session *is, const char *fmt, ...) {
     char tmp[64];
-    int i;
     va_list args;
     va_start(args, fmt);
     vsnprintf(tmp, sizeof(tmp), fmt, args);
     va_end(args);
-
-    for (i = 0; i < sizeof(tmp); i++) {
-        if (tmp[i] == 0) {
-            return;
-        } else {
-            if (tmp[i] == '\n')
-                is->is_handle_char_from_local(is, '\r');
-            is->is_handle_char_from_local(is, tmp[i]);
-        }
-    }
-}
+    is->is_handle_char_from_local(is, tmp, strlen(tmp));
+ }
 
 static void minicli_command_noop(struct interactive_session *is) {
 }
 
-static const char banner[] = "\n"
-        " _  _     _ _        __      __       _    _\n"
-        "| || |___| | |___    \\ \\    / /__ _ _| |__| |\n"
-        "| __ / -_) | / _ \\_   \\ \\/\\/ / _ \\ '_| / _` |\n"
-        "|_||_\\___|_|_\\___( )   \\_/\\_/\\___/_| |_\\__,_|\n"
-        "                 |/\n"
-        "Welcome to minicli! Type ^D to exit and 'help' for help.\n";
+static const char banner[] = "\r\n"
+		 " _  _       _  _       __      __          _     _ \r\n"
+		 "| || | ___ | || | ___  \ \    / /___  _ _ | | __| |\r\n"
+		 "| __ |/ -_)| || |/ _ \  \ \/\/ // _ \| '_|| |/ _` |\r\n"
+		 "|_||_|\___||_||_|\___/   \_/\_/ \___/|_|  |_|\__,_|\r\n"
+		"Welcome to minicli! Type ^D to exit and 'help' for help.\r\n";
 
 static void minicli_command_banner(struct interactive_session *is) {
-    int n = 0;
-    char buf[64];
-    //for (n = 0; n < strlen(banner); n = n + 64) {
-        strncpy(buf, banner + n, 64);
-        minicli_printf(is, banner);
-    //}
+	int n = 0;
+	char buf[64];
+	for (n = 0; n < strlen(banner); n = n + 64) {
+		strncpy(buf, banner + n, 64);
+		minicli_printf(is, buf);
+	}
 }
 
 static void minicli_command_help(struct interactive_session *is) {
@@ -77,13 +71,13 @@ static void minicli_command_help(struct interactive_session *is) {
 
     cc = minicli_commands;
     while (cc->cmd != NULL) {
-        minicli_printf(is, "	%s\n", cc->cmd);
+        minicli_printf(is, "	%s\r\n", cc->cmd);
         cc++;
     }
 }
 
 static void minicli_prompt(struct interactive_session *is) {
-    minicli_printf(is, "minicli> ");
+    minicli_printf(is, "\r\nminicli> ");
 }
 
 void minicli_handle_command(struct interactive_session *is, const char *cmd) {
@@ -98,19 +92,19 @@ void minicli_handle_command(struct interactive_session *is, const char *cmd) {
         }
         cc++;
     }
-    minicli_printf(is, "%c? unknown command\n", 7);
+    minicli_printf(is, "%c? unknown command\r\n", 7);
     minicli_prompt(is);
 }
 
 static void minicli_handle_char(struct interactive_session *is, char c) {
     if (c == '\r') {
-        minicli_printf(is, "\n");
+        minicli_printf(is, "\r\n");
         next_command[next_command_idx] = 0;
         minicli_handle_command(is, next_command);
         next_command_idx = 0;
     } else if (c == 3) {
         // ^C
-        minicli_printf(is, "^C\n");
+        minicli_printf(is, "^C\r\n");
         next_command[next_command_idx] = 0;
         minicli_prompt(is);
     } else if (c == 4) {
