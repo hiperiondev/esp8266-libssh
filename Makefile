@@ -3,6 +3,5 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := esp8266-libssh
-
+PROJECT_NAME := esp8266-ssh
 include $(IDF_PATH)/make/project.mk

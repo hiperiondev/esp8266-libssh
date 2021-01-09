@@ -2,6 +2,7 @@
 #include <libssh/libssh.h>
 #include <libssh/server.h>
 #include <libssh/callbacks.h>
+#include <libssh/misc.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <sys/queue.h>
@@ -14,7 +15,7 @@ static const char *TAG = "sshd_task";
 
 ssh_session local_session;
 
-static void handle_char_from_local(struct interactive_session*, char);
+void handle_char_from_local(struct interactive_session*, char);
 static void sendtochannel(struct interactive_session *is, char *c, int len);
 
 struct ssh_poll_handle_struct* ssh_bind_get_poll(struct ssh_bind_struct*);
@@ -367,6 +368,7 @@ int sshd_main(struct server_ctx *sc) {
         return SSH_ERROR;
     while (!time_to_die) {
         error = ssh_event_dopoll(sc->sc_sshevent, -1);
+
         if (error == SSH_ERROR || error == SSH_AGAIN) {
             dead_eater(sc);
         }
@@ -375,7 +377,7 @@ int sshd_main(struct server_ctx *sc) {
     terminate_server(sc);
     ssh_event_free(event);
     ssh_finalize();
-
+    ESP_LOGI(TAG, "END sshd_main");
     return SSH_OK;
 }
 

@@ -66,7 +66,20 @@ static struct ssh_user* lookup_user(struct server_ctx *sc, const char *user) {
 }
 
 static void ssh_log_function(int priority, const char *function, const char *buffer, void *userdata) {
-    ESP_LOGI(TAG, "ssh_log: (%d) %s - %s [%s]", priority, function, buffer, (const char *)userdata);
+    if (function == NULL) {
+        ESP_LOGI(TAG, "ssh_log: function == NULL");
+        return;
+    }
+    if (buffer == NULL) {
+        ESP_LOGI(TAG, "ssh_log: buffer == NULL");
+        return;
+    }
+    if (userdata == NULL) {
+        ESP_LOGI(TAG, "ssh_log: userdata == NULL");
+        return;
+    }
+
+    ESP_LOGI(TAG, "ssh_log: (%d) %s - %s [%s]", priority, function, buffer, (const char* )userdata);
 }
 
 void sshd_task(void *arg) {
@@ -104,7 +117,7 @@ void start_sshd(void) {
     xTaskCreate(
             sshd_task,
             "sshd",
-            8000,
+            10000,
             NULL,
             10,
             NULL
