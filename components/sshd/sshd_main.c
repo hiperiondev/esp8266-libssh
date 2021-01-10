@@ -3,6 +3,8 @@
 #include <libssh/server.h>
 #include <libssh/callbacks.h>
 #include <libssh/misc.h>
+#include <libssh/poll.h>
+#include <libssh/bind.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <sys/queue.h>
@@ -13,14 +15,10 @@
 #include "sshd_main.h"
 static const char *TAG = "sshd_task";
 
-ssh_session local_session;
-
-void handle_char_from_local(struct interactive_session*, char);
 static void sendtochannel(struct interactive_session *is, char *c, int len);
 
-struct ssh_poll_handle_struct* ssh_bind_get_poll(struct ssh_bind_struct*);
-int ssh_event_add_poll(ssh_event event, struct ssh_poll_handle_struct*);
-int ssh_event_remove_poll(ssh_event event, struct ssh_poll_handle_struct*);
+struct ssh_list *local_sessions;
+struct client_ctx *cc_local;
 
 static int import_embedded_host_key(ssh_bind sshbind, const char *base64_key) {
     size_t ptralign = sizeof(void*);
@@ -239,8 +237,9 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     long t = 0;
     struct client_ctx *cc = (struct client_ctx *) SSH_CALLOC(1, sizeof(struct client_ctx));
 
+    cc_local = cc;
     cc->cc_session = ssh_new();
-    local_session  = cc->cc_session; //TODO: test
+
     if (ssh_bind_accept(sshbind, cc->cc_session) == SSH_ERROR) {
         goto cleanup;
     }
@@ -259,9 +258,11 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
 
     SLIST_INSERT_HEAD(&sc->sc_client_head, cc, cc_client_list);
     ssh_event_add_session(sc->sc_sshevent, cc->cc_session);
+    ESP_LOGI(TAG, "incoming_connection");
     return;
     cleanup: ssh_free(cc->cc_session);
     SSH_FREE(cc);
+    ESP_LOGI(TAG, "EXIT incoming_connection");
 }
 
 static void dead_eater(struct server_ctx *sc) {
@@ -353,7 +354,6 @@ int sshd_main(struct server_ctx *sc) {
     ESP_LOGI(TAG, "sshd_main");
     int error;
     ssh_event event;
-    bool time_to_die = false;
 
     if (ssh_init() < 0) {
         return SSH_ERROR;
@@ -366,17 +366,37 @@ int sshd_main(struct server_ctx *sc) {
 
     if (create_new_server(sc) != SSH_OK)
         return SSH_ERROR;
-    while (!time_to_die) {
-        error = ssh_event_dopoll(sc->sc_sshevent, -1);
+
+    int cc_local_session = 0;
+    int cc_local_session_last = 0;
+    while (true) {
+        error = ssh_event_dopoll(sc->sc_sshevent, 3);
+        if (cc_local != NULL)
+            if (cc_local->cc_session != NULL)
+                cc_local_session = cc_local->cc_session->connected;
+            else
+                cc_local_session = 0;
+        else
+            cc_local_session = 0;
 
         if (error == SSH_ERROR || error == SSH_AGAIN) {
             dead_eater(sc);
         }
+
+        if (cc_local_session_last && !cc_local_session){
+            ESP_LOGI(TAG, "session disconnected: time to die");
+            break;
+        }
+        else
+            cc_local_session_last = cc_local_session;
+
     }
 
     terminate_server(sc);
     ssh_event_free(event);
     ssh_finalize();
+    ssh_free(cc_local->cc_session);
+    SSH_FREE(cc_local);
     ESP_LOGI(TAG, "END sshd_main");
     return SSH_OK;
 }

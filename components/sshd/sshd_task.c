@@ -71,11 +71,11 @@ static void ssh_log_function(int priority, const char *function, const char *buf
         return;
     }
     if (buffer == NULL) {
-        ESP_LOGI(TAG, "ssh_log: buffer == NULL");
+        ESP_LOGI(TAG, "ssh_log: buffer == NULL (%s)", function);
         return;
     }
     if (userdata == NULL) {
-        ESP_LOGI(TAG, "ssh_log: userdata == NULL");
+        ESP_LOGI(TAG, "ssh_log: userdata == NULL (%s)", function);
         return;
     }
 
