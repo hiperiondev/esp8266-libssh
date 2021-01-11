@@ -352,6 +352,7 @@ static void terminate_server(struct server_ctx *sc) {
 
 int sshd_main(struct server_ctx *sc) {
     ESP_LOGI(TAG, "sshd_main");
+
     int error;
     ssh_event event;
 
@@ -397,7 +398,9 @@ int sshd_main(struct server_ctx *sc) {
     ssh_finalize();
     ssh_free(cc_local->cc_session);
     SSH_FREE(cc_local);
+    vPortFree(sc);
     ESP_LOGI(TAG, "END sshd_main");
+
     return SSH_OK;
 }
 
