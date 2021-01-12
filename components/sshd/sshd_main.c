@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <sys/queue.h>
 #include <stddef.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_log.h"
 #include "config.h"
 #include "sshd.h"
@@ -16,9 +18,6 @@
 static const char *TAG = "sshd_task";
 
 static void sendtochannel(struct interactive_session *is, char *c, int len);
-
-struct ssh_list *local_sessions;
-struct client_ctx *cc_local;
 
 static int import_embedded_host_key(ssh_bind sshbind, const char *base64_key) {
     size_t ptralign = sizeof(void*);
@@ -237,7 +236,7 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     long t = 0;
     struct client_ctx *cc = (struct client_ctx *) SSH_CALLOC(1, sizeof(struct client_ctx));
 
-    cc_local = cc;
+    //cc_local = cc;
     cc->cc_session = ssh_new();
 
     if (ssh_bind_accept(sshbind, cc->cc_session) == SSH_ERROR) {
@@ -277,6 +276,7 @@ static void dead_eater(struct server_ctx *sc) {
             cc_removed = NULL;
         }
         status = ssh_get_status(cc->cc_session);
+
         if (status & (SSH_CLOSED | SSH_CLOSED_ERROR)) {
             if (cc->cc_didchannel) {
                 ssh_channel_free(cc->cc_channel);
@@ -352,8 +352,6 @@ static void terminate_server(struct server_ctx *sc) {
 
 int sshd_main(struct server_ctx *sc) {
     ESP_LOGI(TAG, "sshd_main");
-
-    int error;
     ssh_event event;
 
     if (ssh_init() < 0) {
@@ -368,37 +366,14 @@ int sshd_main(struct server_ctx *sc) {
     if (create_new_server(sc) != SSH_OK)
         return SSH_ERROR;
 
-    int cc_local_session = 0;
-    int cc_local_session_last = 0;
     while (true) {
-        error = ssh_event_dopoll(sc->sc_sshevent, 3);
-        if (cc_local != NULL)
-            if (cc_local->cc_session != NULL)
-                cc_local_session = cc_local->cc_session->connected;
-            else
-                cc_local_session = 0;
-        else
-            cc_local_session = 0;
-
-        if (error == SSH_ERROR || error == SSH_AGAIN) {
-            dead_eater(sc);
-        }
-
-        if (cc_local_session_last && !cc_local_session){
-            ESP_LOGI(TAG, "session disconnected: time to die");
-            break;
-        }
-        else
-            cc_local_session_last = cc_local_session;
-
+        ssh_event_dopoll(sc->sc_sshevent, 500);
+        dead_eater(sc);
     }
 
     terminate_server(sc);
     ssh_event_free(event);
     ssh_finalize();
-    ssh_free(cc_local->cc_session);
-    SSH_FREE(cc_local);
-    vPortFree(sc);
     ESP_LOGI(TAG, "END sshd_main");
 
     return SSH_OK;
