@@ -43,11 +43,12 @@ static void minicli_command_noop(struct interactive_session *is) {
 }
 
 static const char banner[] = "\r\n"
-        " _  _       _  _       __      __          _     _ \r\n"
-        "| || |  ___ | || | ___  \\ \\    / /___  _ _ | | __| |\r\n"
-        "| __ |/ -_)| || |/  _ \\  \\ \\/\\/ // _ \\| '_|| |/ _` |\r\n"
-        "|_||_|\\___||_||_|\\___/   \\_/  _/ \\___/|_|  |_|\\__,_|\r\n"
-        "Welcome to minicli! Type ^D to exit and 'help' for help.\r\n";
+        " ___ ___  ___   _  _ _               _\r\n"
+        "|_ _/ __|/ __| | || ( _)_ __  ___ _ _(_)___ _ _\r\n"
+        " | |\\__ \\ (__  | __ | | '_ \\/ -_) '_ | / _ \\ ' \\\r\n"
+        "|___|___/\\___| |_||_|_| .__/\\___|_| |_\\___/_||_|\r\n"
+        "                       |_|\r\n"
+        "Welcome to isc cli (use help).\r\n";
 
 static void minicli_command_banner(struct interactive_session *is) {
 	int n = 0;
@@ -74,10 +75,12 @@ static void minicli_command_status(struct interactive_session *is) {
     minicli_printf(is, buf);
     sprintf(buf, "minimum free heap size: %u\r\n", esp_get_minimum_free_heap_size());
     minicli_printf(is, buf);
+
+
 }
 
 static void minicli_prompt(struct interactive_session *is) {
-    minicli_printf(is, "\r\nminicli> ");
+    minicli_printf(is, "\r\nisc> ");
 }
 
 void minicli_handle_command(struct interactive_session *is, const char *cmd) {
