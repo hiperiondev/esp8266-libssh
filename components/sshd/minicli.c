@@ -14,6 +14,7 @@ uint8_t next_command_idx = 0;
 
 static void minicli_command_banner(struct interactive_session*);
 static void minicli_command_help(struct interactive_session*);
+static void minicli_command_status(struct interactive_session*);
 static void minicli_command_noop(struct interactive_session*);
 
 struct minicli_command {
@@ -24,6 +25,7 @@ struct minicli_command {
 struct minicli_command minicli_commands[] = {
         { "banner",    minicli_command_banner    },
         { "help",      minicli_command_help      },
+        { "status",    minicli_command_status    },
         { "",          minicli_command_noop      },
         {  NULL, NULL }
 };
@@ -64,6 +66,14 @@ static void minicli_command_help(struct interactive_session *is) {
         minicli_printf(is, "	%s\r\n", cc->cmd);
         cc++;
     }
+}
+
+static void minicli_command_status(struct interactive_session *is) {
+    char buf[64];
+    sprintf(buf, "free heap size: %d\r\n", esp_get_free_heap_size());
+    minicli_printf(is, buf);
+    sprintf(buf, "minimum free heap size: %u\r\n", esp_get_minimum_free_heap_size());
+    minicli_printf(is, buf);
 }
 
 static void minicli_prompt(struct interactive_session *is) {
