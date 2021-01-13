@@ -17,6 +17,8 @@
 #include "sshd_main.h"
 static const char *TAG = "sshd_task";
 
+#define REMOTE_SOFTWARE_VERSION "Hiperion-SSH"
+
 static void sendtochannel(struct interactive_session *is, char *c, int len);
 
 static int import_embedded_host_key(ssh_bind sshbind, const char *base64_key) {
@@ -355,6 +357,7 @@ static int create_new_server(struct server_ctx *sc) {
     if (sc->sc_sshbind == NULL) {
         return SSH_ERROR;
     }
+    ssh_bind_options_set(sc->sc_sshbind, SSH_BIND_OPTIONS_BANNER, REMOTE_SOFTWARE_VERSION);
     ssh_bind_options_set(sc->sc_sshbind, SSH_BIND_OPTIONS_LOG_VERBOSITY_STR, "1");
     ssh_bind_set_callbacks(sc->sc_sshbind, &sc->sc_bind_cb, sc);
     import_embedded_host_key(sc->sc_sshbind, sc->sc_host_key);
