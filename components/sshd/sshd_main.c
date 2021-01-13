@@ -250,17 +250,6 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_TIMEOUT, &t);
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_TIMEOUT_USEC, &t);
 
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_KEY_EXCHANGE," \
-            curve25519-sha256, \
-            ecdh-sha2-nistp256, \
-            diffie-hellman-group18-sha512, \
-            diffie-hellman-group16-sha512, \
-            diffie-hellman-group-exchange-sha256, \
-            diffie-hellman-group14-sha1, \
-            diffie-hellman-group1-sha1, \
-            diffie-hellman-group-exchange-sha1 \
-            ");
-
     /////////////////////////////////////
     // availables ciphers on mbedcrypt //
     //                                 //
@@ -274,27 +263,29 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     //     aes128-cbc                  //
     //     3des-cbc                    //
     /////////////////////////////////////
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_C_S, "aes128-ctr,aes192-ctr,aes256-ctr,aes128-cbc");
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_S_C, "aes128-ctr,aes192-ctr,aes256-ctr,aes128-cbc");
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_C_S, "aes128-ctr, aes192-ctr, aes256-ctr,aes128-cbc");
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_S_C, "aes128-ctr, aes192-ctr, aes256-ctr,aes128-cbc");
 
+    ////////////////////////////////////////
+    // availables MAC hashes on mbedcrypt //
+    //                                    //
+    //     hmac-sha2-256-etm@openssh.com  //
+    //     hmac-sha2-512-etm@openssh.com  //
+    //     hmac-sha1-etm@openssh.com      //
+    //     hmac-sha2-512                  //
+    //     hmac-sha2-256                  //
+    //     hmac-sha1                      //
+    ////////////////////////////////////////
     /*
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_C_S, " \
-            hmac-sha2-256-etm@openssh.com, \
-            hmac-sha2-512-etm@openssh.com, \
-            hmac-sha1-etm@openssh.com, \
-            hmac-sha2-512, \
-            hmac-sha2-256, \
-            hmac-sha1 \
-            ");
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_S_C, " \
-            hmac-sha2-256-etm@openssh.com, \
-            hmac-sha2-512-etm@openssh.com, \
-            hmac-sha1-etm@openssh.com, \
-            hmac-sha2-512, \
-            hmac-sha2-256, \
-            hmac-sha1 \
-            ");
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_C_S, "");
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_S_C, "");
     */
+
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_KEY_EXCHANGE,
+            "curve25519-sha256@libssh.org, curve25519-sha256, ecdh-sha2-nistp256, diffie-hellman-group-exchange-sha256, diffie-hellman-group14-sha1, diffie-hellman-group1-sha1, diffie-hellman-group18-sha512, diffie-hellman-group16-sha512");
+
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
+            "ecdh-sha2-nistp256, ssh-rsa, rsa-sha2-256, ssh-dss");
 
     if (ssh_handle_key_exchange(cc->cc_session) == SSH_ERROR) {
         ssh_disconnect(cc->cc_session);
