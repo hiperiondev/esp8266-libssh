@@ -22,20 +22,10 @@ struct minicli_command {
 };
 
 struct minicli_command minicli_commands[] = {
-        { "banner",
-                minicli_command_banner
-        },
-        {
-                "help",
-        minicli_command_help
-        },
-        {
-                "", minicli_command_noop
-        },
-        {
-                NULL,
-                NULL
-        }
+        { "banner",    minicli_command_banner    },
+        { "help",      minicli_command_help      },
+        { "",          minicli_command_noop      },
+        {  NULL, NULL }
 };
 
 void minicli_printf(struct interactive_session *is, const char *fmt, ...) {
