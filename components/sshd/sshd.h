@@ -1,4 +1,3 @@
-
 void start_sshd(void);
 
 struct interactive_session {

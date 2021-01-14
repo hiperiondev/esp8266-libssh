@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 #include "esp_log.h"
 #include "config.h"
 #include "sshd.h"
@@ -18,8 +19,36 @@
 static const char *TAG = "sshd_task";
 
 #define REMOTE_SOFTWARE_VERSION "Hiperion-SSH"
+#define IS_TIMEOUT 30
+
+TimerHandle_t is_timerHndl;
+ssh_session is_local_session;
 
 static void sendtochannel(struct interactive_session *is, char *c, int len);
+
+static void is_timeout_callback(xTimerHandle pxTimer) {
+    ESP_LOGI(TAG, "interactive session timeout! disconnecting...");
+    ssh_disconnect(is_local_session);
+    xTimerDelete(pxTimer, 0);
+}
+
+static int start_is_timeout(ssh_session session) {
+    is_local_session = session;
+
+    is_timerHndl = xTimerCreate(
+            "timerException",
+            pdMS_TO_TICKS(IS_TIMEOUT)*1000,
+            pdTRUE,
+            (void*) 0,
+            is_timeout_callback
+            );
+
+    if (xTimerStart(is_timerHndl, 0) != pdPASS) {
+        ESP_LOGI(TAG, "ERROR STARTING IS TIMEOUT TIMER");
+        return 1;
+    }
+    return 0;
+}
 
 static int import_embedded_host_key(ssh_bind sshbind, const char *base64_key) {
     size_t ptralign = sizeof(void*);
@@ -180,6 +209,7 @@ static int shell_request(ssh_session session, ssh_channel channel, void *userdat
     //cc->cc_is.is_handle_char_from_local = handle_char_from_local;
     cc->cc_is.is_handle_char_from_local = sendtochannel;
     cc->cc_begin_interactive_session(&cc->cc_is);
+    start_is_timeout(session);
     return SSH_OK;
 }
 
@@ -193,6 +223,7 @@ static int exec_request(ssh_session session, ssh_channel channel, const char *co
     minicli_handle_command(&cc->cc_is, command);
     ssh_channel_send_eof(channel);
     ssh_channel_close(channel);
+    xTimerReset(is_timerHndl, 0);
     return SSH_OK;
 }
 

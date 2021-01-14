@@ -15,6 +15,7 @@ uint8_t next_command_idx = 0;
 static void minicli_command_banner(struct interactive_session*);
 static void minicli_command_help(struct interactive_session*);
 static void minicli_command_status(struct interactive_session*);
+static void minicli_command_exit(struct interactive_session*);
 static void minicli_command_noop(struct interactive_session*);
 
 struct minicli_command {
@@ -26,6 +27,7 @@ struct minicli_command minicli_commands[] = {
         { "banner",    minicli_command_banner    },
         { "help",      minicli_command_help      },
         { "status",    minicli_command_status    },
+        { "exit",      minicli_command_exit      },
         { "",          minicli_command_noop      },
         {  NULL, NULL }
 };
@@ -40,6 +42,10 @@ void minicli_printf(struct interactive_session *is, const char *fmt, ...) {
  }
 
 static void minicli_command_noop(struct interactive_session *is) {
+}
+
+static void minicli_command_exit(struct interactive_session *is) {
+
 }
 
 static const char banner[] = "\r\n"
