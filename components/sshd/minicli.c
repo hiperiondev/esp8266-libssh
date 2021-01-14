@@ -45,7 +45,7 @@ static void minicli_command_noop(struct interactive_session *is) {
 }
 
 static void minicli_command_exit(struct interactive_session *is) {
-
+    is->is_exit();
 }
 
 static const char banner[] = "\r\n"
@@ -92,6 +92,8 @@ static void minicli_prompt(struct interactive_session *is) {
 void minicli_handle_command(struct interactive_session *is, const char *cmd) {
     struct minicli_command *cc;
 
+    is->is_reset_timeout();
+
     cc = minicli_commands;
     while (cc->cmd != NULL) {
         if (!strcmp(cmd, cc->cmd)) {
@@ -101,6 +103,7 @@ void minicli_handle_command(struct interactive_session *is, const char *cmd) {
         }
         cc++;
     }
+
     minicli_printf(is, "%c? unknown command\r\n", 7);
     minicli_prompt(is);
 }

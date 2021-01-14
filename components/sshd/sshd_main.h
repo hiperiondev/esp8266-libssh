@@ -1,3 +1,13 @@
+/*
+ * sshd_main.h
+ *
+ *  Created on: 12 ene. 2021
+ *      Author: egonzalez
+ */
+
+#ifndef _SSHD_MAIN_H_
+#define _SSHD_MAIN_H_
+
 struct ssh_user {
     const char *su_user;
     const char *su_password;
@@ -38,3 +48,7 @@ struct server_ctx {
 };
 
 int sshd_main(struct server_ctx *sc);
+
+#endif /* _SSHD_MAIN_H_ */
+
+

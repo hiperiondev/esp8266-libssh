@@ -13,23 +13,24 @@
 #include "freertos/task.h"
 #include "freertos/timers.h"
 #include "esp_log.h"
-#include "config.h"
 #include "sshd.h"
 #include "sshd_main.h"
 static const char *TAG = "sshd_task";
 
 #define REMOTE_SOFTWARE_VERSION "Hiperion-SSH"
-#define IS_TIMEOUT 30
+#define IS_TIMEOUT_SEC 30
 
 TimerHandle_t is_timerHndl;
 ssh_session is_local_session;
+ssh_channel is_local_channel;
 
 static void sendtochannel(struct interactive_session *is, char *c, int len);
 
 static void is_timeout_callback(xTimerHandle pxTimer) {
     ESP_LOGI(TAG, "interactive session timeout! disconnecting...");
     ssh_disconnect(is_local_session);
-    xTimerDelete(pxTimer, 0);
+    if (pxTimer != NULL)
+        xTimerDelete(pxTimer, 0);
 }
 
 static int start_is_timeout(ssh_session session) {
@@ -37,17 +38,31 @@ static int start_is_timeout(ssh_session session) {
 
     is_timerHndl = xTimerCreate(
             "timerException",
-            pdMS_TO_TICKS(IS_TIMEOUT)*1000,
+            pdMS_TO_TICKS(IS_TIMEOUT_SEC)*1000,
             pdTRUE,
             (void*) 0,
             is_timeout_callback
             );
 
     if (xTimerStart(is_timerHndl, 0) != pdPASS) {
-        ESP_LOGI(TAG, "ERROR STARTING IS TIMEOUT TIMER");
+        ESP_LOGI(TAG, "ERROR STARTING IS_TIMEOUT TIMER");
         return 1;
     }
     return 0;
+}
+
+static void is_exit(void) {
+    if (is_local_session != NULL && is_local_channel != NULL) {
+        ssh_channel_send_eof(is_local_channel);
+        ssh_channel_close(is_local_channel);
+        //ssh_channel_free(is_local_channel);
+    }
+    if (is_timerHndl != NULL)
+        xTimerDelete(is_timerHndl, 0);
+}
+
+static void is_reset_timeout(void) {
+    xTimerReset(is_timerHndl, 0);
 }
 
 static int import_embedded_host_key(ssh_bind sshbind, const char *base64_key) {
@@ -206,8 +221,9 @@ static int shell_request(ssh_session session, ssh_channel channel, void *userdat
     if (cc->cc_didshell)
         return SSH_ERROR;
     cc->cc_didshell = true;
-    //cc->cc_is.is_handle_char_from_local = handle_char_from_local;
     cc->cc_is.is_handle_char_from_local = sendtochannel;
+    cc->cc_is.is_exit = is_exit;
+    cc->cc_is.is_reset_timeout = is_reset_timeout;
     cc->cc_begin_interactive_session(&cc->cc_is);
     start_is_timeout(session);
     return SSH_OK;
@@ -218,12 +234,11 @@ static int exec_request(ssh_session session, ssh_channel channel, const char *co
     struct client_ctx *cc = (struct client_ctx*) userdata;
     if (cc->cc_didshell)
         return SSH_ERROR;
-    //cc->cc_is.is_handle_char_from_local = handle_char_from_local;
+
     cc->cc_is.is_handle_char_from_local = sendtochannel;
     minicli_handle_command(&cc->cc_is, command);
     ssh_channel_send_eof(channel);
     ssh_channel_close(channel);
-    xTimerReset(is_timerHndl, 0);
     return SSH_OK;
 }
 
@@ -260,6 +275,8 @@ static ssh_channel channel_open(ssh_session session, void *userdata) {
     ssh_callbacks_init(&cc->channel_cb);
     ssh_set_channel_callbacks(cc->cc_channel, &cc->channel_cb);
     cc->cc_didchannel = true;
+
+    is_local_channel = cc->cc_channel;
 
     return cc->cc_channel;
 }
@@ -327,7 +344,7 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
 
     SLIST_INSERT_HEAD(&sc->sc_client_head, cc, cc_client_list);
     ssh_event_add_session(sc->sc_sshevent, cc->cc_session);
-    ESP_LOGI(TAG, "incoming_connection");
+    ESP_LOGI(TAG, "incoming connection");
     return;
     cleanup: ssh_free(cc->cc_session);
     SSH_FREE(cc);
@@ -360,6 +377,8 @@ static void dead_eater(struct server_ctx *sc) {
     if (cc_removed) {
     	SSH_FREE(cc_removed);
         cc_removed = NULL;
+        if (is_timerHndl != NULL)
+            xTimerDelete(is_timerHndl, 0);
     }
 }
 
