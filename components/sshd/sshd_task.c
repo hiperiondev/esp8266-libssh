@@ -117,7 +117,7 @@ void start_sshd(void) {
     xTaskCreate(
             sshd_task,
             "sshd",
-            10000,
+            9000,
             NULL,
             10,
             NULL

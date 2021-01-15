@@ -21,21 +21,21 @@ static const char *TAG = "sshd_task";
 #define IS_TIMEOUT_SEC 30
 
 TimerHandle_t is_timerHndl;
-ssh_session is_local_session;
 ssh_channel is_local_channel;
 
 static void sendtochannel(struct interactive_session *is, char *c, int len);
 
 static void is_timeout_callback(xTimerHandle pxTimer) {
     ESP_LOGI(TAG, "interactive session timeout! disconnecting...");
-    ssh_disconnect(is_local_session);
+    if (is_local_channel != NULL) {
+        ssh_channel_send_eof(is_local_channel);
+        ssh_channel_close(is_local_channel);
+    }
     if (pxTimer != NULL)
         xTimerDelete(pxTimer, 0);
 }
 
 static int start_is_timeout(ssh_session session) {
-    is_local_session = session;
-
     is_timerHndl = xTimerCreate(
             "timerException",
             pdMS_TO_TICKS(IS_TIMEOUT_SEC)*1000,
@@ -52,10 +52,9 @@ static int start_is_timeout(ssh_session session) {
 }
 
 static void is_exit(void) {
-    if (is_local_session != NULL && is_local_channel != NULL) {
+    if (is_local_channel != NULL) {
         ssh_channel_send_eof(is_local_channel);
         ssh_channel_close(is_local_channel);
-        //ssh_channel_free(is_local_channel);
     }
     if (is_timerHndl != NULL)
         xTimerDelete(is_timerHndl, 0);
@@ -359,14 +358,18 @@ static void dead_eater(struct server_ctx *sc) {
     SLIST_FOREACH(cc, &sc->sc_client_head, cc_client_list)
     {
         if (cc_removed) {
-        	SSH_FREE(cc_removed);
+            ESP_LOGI(TAG, "dead_eater: cc_removed 1");
+            SSH_FREE(cc_removed);
             cc_removed = NULL;
         }
         status = ssh_get_status(cc->cc_session);
 
         if (status & (SSH_CLOSED | SSH_CLOSED_ERROR)) {
+            ESP_LOGI(TAG, "dead_eater: status CLOSED or CLOSED_ERROR");
             if (cc->cc_didchannel) {
-                ssh_channel_free(cc->cc_channel);
+                if (cc->cc_channel != NULL)
+                    ESP_LOGI(TAG, "dead_eater: ssh channel free");
+                    ssh_channel_free(cc->cc_channel);
             }
             ssh_event_remove_session(sc->sc_sshevent, cc->cc_session);
             ssh_free(cc->cc_session);
@@ -375,10 +378,9 @@ static void dead_eater(struct server_ctx *sc) {
         }
     }
     if (cc_removed) {
+        ESP_LOGI(TAG, "dead_eater: cc_removed 2");
     	SSH_FREE(cc_removed);
         cc_removed = NULL;
-        if (is_timerHndl != NULL)
-            xTimerDelete(is_timerHndl, 0);
     }
 }
 
