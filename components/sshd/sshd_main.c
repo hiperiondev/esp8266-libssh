@@ -32,9 +32,15 @@ static void sendtochannel(struct interactive_session *is, char *c, int len);
 
 static void stop_is_timeout(void) {
     ESP_LOGI(TAG, "is timer stop");
+    if (is_timerHndl != NULL)
+        xTimerStop(is_timerHndl, 0);
+}
+
+static void start_is_timeout(void) {
+    ESP_LOGI(TAG, "is timer start");
     if (is_timerHndl != NULL) {
-        xTimerDelete(is_timerHndl, 0);
-        is_timerHndl = NULL;
+        xTimerReset(is_timerHndl, 0);
+        xTimerStart(is_timerHndl, 0);
     }
 }
 
@@ -55,9 +61,9 @@ static void is_timeout_callback(xTimerHandle pxTimer) {
     stop_is_timeout();
 }
 
-static int start_is_timeout(void) {
+static int init_is_timeout(void) {
     if (is_timerHndl != NULL) {
-        ESP_LOGI(TAG, "is timer already started");
+        ESP_LOGI(TAG, "is timer already init");
         return 0;
     }
 
@@ -70,11 +76,12 @@ static int start_is_timeout(void) {
             );
 
     if (xTimerStart(is_timerHndl, 0) != pdPASS) {
-        ESP_LOGI(TAG, "ERROR STARTING IS_TIMEOUT TIMER");
+        ESP_LOGI(TAG, "ERROR STARTING IS TIMEOUT TIMER");
         return 1;
     }
 
-    ESP_LOGI(TAG, "is timer start");
+    xTimerStop(is_timerHndl, 0);
+    ESP_LOGI(TAG, "is timer created");
     return 0;
 }
 
@@ -177,7 +184,7 @@ static int auth_password(ssh_session session, const char *user, const char *pass
     return SSH_AUTH_SUCCESS;
 
     denied:
-    if (++pass_try > PASS_TRY)
+    if (++pass_try >= PASS_TRY)
         ssh_disconnect(session);
     return SSH_AUTH_DENIED;
 }
@@ -217,7 +224,7 @@ static int auth_publickey(ssh_session session, const char *user, struct ssh_key_
     return SSH_AUTH_SUCCESS;
 
     denied:
-    if (++pass_try > PASS_TRY)
+    if (++pass_try >= PASS_TRY)
         ssh_disconnect(session);
     return SSH_AUTH_DENIED;
 }
@@ -353,7 +360,6 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_KEY_EXCHANGE,
             "curve25519-sha256@libssh.org, curve25519-sha256, ecdh-sha2-nistp256, diffie-hellman-group-exchange-sha256, diffie-hellman-group14-sha1, diffie-hellman-group1-sha1, diffie-hellman-group18-sha512, diffie-hellman-group16-sha512");
 
-    //(void) ssh_options_set(cc->cc_session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, "ecdh-sha2-nistp256, ssh-rsa, rsa-sha2-256, ssh-dss");
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
             "ssh-rsa-cert-v01@openssh.com ssh-dss-cert-v01@openssh.com ecdsa-sha2-nistp256-cert-v01@openssh.com ecdsa-sha2-nistp384-cert-v01@openssh.com ecdsa-sha2-nistp521-cert-v01@openssh.com ssh-ed25519-cert-v01@openssh.com ecdsa-sha2-nistp256 ecdsa-sha2-nistp384 ecdsa-sha2-nistp521 ssh-rsa ssh-dss ssh-ed25519");
 
@@ -488,8 +494,10 @@ int sshd_main(struct server_ctx *sc) {
     if (create_new_server(sc) != SSH_OK)
         return SSH_ERROR;
 
+    init_is_timeout();
+
     while (true) {
-        ssh_event_dopoll(sc->sc_sshevent, 500);
+        ssh_event_dopoll(sc->sc_sshevent, 200);
         dead_eater(sc);
     }
 
