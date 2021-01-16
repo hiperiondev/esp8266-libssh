@@ -377,6 +377,7 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     pass_try = 0;
     kill_sess_chan = false;
     is_local_session = cc->cc_session;
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     start_is_timeout();
     return;
     cleanup: ssh_free(cc->cc_session);
