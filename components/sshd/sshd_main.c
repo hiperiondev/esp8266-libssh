@@ -30,8 +30,16 @@ bool kill_sess_chan;
 
 static void sendtochannel(struct interactive_session *is, char *c, int len);
 
+static void stop_is_timeout(void) {
+    ESP_LOGI(TAG, "is timer stop");
+    if (is_timerHndl != NULL) {
+        xTimerDelete(is_timerHndl, 0);
+        is_timerHndl = NULL;
+    }
+}
+
 static void is_timeout_callback(xTimerHandle pxTimer) {
-    ESP_LOGI(TAG, "is timeout! disconnecting...");
+    ESP_LOGI(TAG, "is timeout. disconnecting...");
     if (kill_sess_chan) {
         ESP_LOGI(TAG, "close channel");
         if (is_local_channel != NULL) {
@@ -44,13 +52,17 @@ static void is_timeout_callback(xTimerHandle pxTimer) {
             ssh_disconnect(is_local_session);
         }
     }
-    if (pxTimer != NULL)
-        xTimerDelete(pxTimer, 0);
+    stop_is_timeout();
 }
 
 static int start_is_timeout(void) {
+    if (is_timerHndl != NULL) {
+        ESP_LOGI(TAG, "is timer already started");
+        return 0;
+    }
+
     is_timerHndl = xTimerCreate(
-            "is_timeout_timer",
+            "is_timer",
             pdMS_TO_TICKS(IS_TIMEOUT_SEC)*1000,
             pdTRUE,
             (void*) 0,
@@ -71,8 +83,7 @@ static void is_exit(void) {
         ssh_channel_send_eof(is_local_channel);
         ssh_channel_close(is_local_channel);
     }
-    if (is_timerHndl != NULL)
-        xTimerDelete(is_timerHndl, 0);
+    stop_is_timeout();
 }
 
 static void is_reset_timeout(void) {
@@ -162,7 +173,7 @@ static int auth_password(ssh_session session, const char *user, const char *pass
         goto denied;
     cc->cc_didauth = true;
 
-    xTimerDelete(is_timerHndl, 0);
+    stop_is_timeout();
     return SSH_AUTH_SUCCESS;
 
     denied:
@@ -202,7 +213,7 @@ static int auth_publickey(ssh_session session, const char *user, struct ssh_key_
     cc->cc_didauth = true;
 
     success:
-    xTimerDelete(is_timerHndl, 0);
+    stop_is_timeout();
     return SSH_AUTH_SUCCESS;
 
     denied:
@@ -378,6 +389,7 @@ static void dead_eater(struct server_ctx *sc) {
             ESP_LOGI(TAG, "dead_eater: cc_removed 1");
             SSH_FREE(cc_removed);
             cc_removed = NULL;
+            stop_is_timeout();
         }
         status = ssh_get_status(cc->cc_session);
 
@@ -396,8 +408,9 @@ static void dead_eater(struct server_ctx *sc) {
     }
     if (cc_removed) {
         ESP_LOGI(TAG, "dead_eater: cc_removed 2");
-    	SSH_FREE(cc_removed);
+        SSH_FREE(cc_removed);
         cc_removed = NULL;
+        stop_is_timeout();
     }
 }
 
