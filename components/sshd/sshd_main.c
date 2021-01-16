@@ -19,25 +19,38 @@ static const char *TAG = "sshd_task";
 
 #define REMOTE_SOFTWARE_VERSION "Hiperion-SSH"
 #define IS_TIMEOUT_SEC 30
+#define PASS_TRY 3
+#define PASS_TIMEOUT_SEC 30
 
 TimerHandle_t is_timerHndl;
 ssh_channel is_local_channel;
+ssh_session is_local_session;
+uint8_t pass_try;
+bool kill_sess_chan;
 
 static void sendtochannel(struct interactive_session *is, char *c, int len);
 
 static void is_timeout_callback(xTimerHandle pxTimer) {
-    ESP_LOGI(TAG, "interactive session timeout! disconnecting...");
-    if (is_local_channel != NULL) {
-        ssh_channel_send_eof(is_local_channel);
-        ssh_channel_close(is_local_channel);
+    ESP_LOGI(TAG, "is timeout! disconnecting...");
+    if (kill_sess_chan) {
+        ESP_LOGI(TAG, "close channel");
+        if (is_local_channel != NULL) {
+            ssh_channel_send_eof(is_local_channel);
+            ssh_channel_close(is_local_channel);
+        }
+    } else {
+        ESP_LOGI(TAG, "close session");
+        if (is_local_session != NULL) {
+            ssh_disconnect(is_local_session);
+        }
     }
     if (pxTimer != NULL)
         xTimerDelete(pxTimer, 0);
 }
 
-static int start_is_timeout(ssh_session session) {
+static int start_is_timeout(void) {
     is_timerHndl = xTimerCreate(
-            "timerException",
+            "is_timeout_timer",
             pdMS_TO_TICKS(IS_TIMEOUT_SEC)*1000,
             pdTRUE,
             (void*) 0,
@@ -48,6 +61,8 @@ static int start_is_timeout(ssh_session session) {
         ESP_LOGI(TAG, "ERROR STARTING IS_TIMEOUT TIMER");
         return 1;
     }
+
+    ESP_LOGI(TAG, "is timer start");
     return 0;
 }
 
@@ -130,23 +145,30 @@ static struct client_ctx* lookup_client(struct server_ctx *sc, ssh_session sessi
 
 static int auth_password(ssh_session session, const char *user, const char *password,
         void *userdata) {
+    ESP_LOGI(TAG, "auth_password");
     struct server_ctx *sc = (struct server_ctx*) userdata;
     struct client_ctx *cc;
     struct ssh_user *su;
 
     cc = lookup_client(sc, session);
     if (cc == NULL)
-        return SSH_AUTH_DENIED;
+        goto denied;
     if (cc->cc_didauth)
-        return SSH_AUTH_DENIED;
+        goto denied;
     su = sc->sc_lookup_user(sc, user);
     if (su == NULL)
-        return SSH_AUTH_DENIED;
+        goto denied;
     if (strcmp(password, su->su_password) != 0)
-        return SSH_AUTH_DENIED;
+        goto denied;
     cc->cc_didauth = true;
 
+    xTimerDelete(is_timerHndl, 0);
     return SSH_AUTH_SUCCESS;
+
+    denied:
+    if (++pass_try > PASS_TRY)
+        ssh_disconnect(session);
+    return SSH_AUTH_DENIED;
 }
 
 static int auth_publickey(ssh_session session, const char *user, struct ssh_key_struct *pubkey,
@@ -159,27 +181,34 @@ static int auth_publickey(ssh_session session, const char *user, struct ssh_key_
 
     cc = lookup_client(sc, session);
     if (cc == NULL)
-        return SSH_AUTH_DENIED;
+        goto denied;
     if (signature_state == SSH_PUBLICKEY_STATE_NONE)
-        return SSH_AUTH_SUCCESS;
+        goto success;
     if (signature_state != SSH_PUBLICKEY_STATE_VALID)
-        return SSH_AUTH_DENIED;
+        goto denied;
     if (cc->cc_didauth)
-        return SSH_AUTH_DENIED;
+        goto denied;
     su = sc->sc_lookup_user(sc, user);
     if (su == NULL)
-        return SSH_AUTH_DENIED;
+        goto denied;
     if (su->su_base64_key == NULL)
-        return SSH_AUTH_DENIED;
+        goto denied;
     if (ssh_pki_import_pubkey_base64(su->su_base64_key, su->su_keytype, &key) != SSH_OK)
-        return SSH_AUTH_DENIED;
+        goto denied;
     error = ssh_key_cmp(key, pubkey, SSH_KEY_CMP_PUBLIC);
     ssh_key_free(key);
     if (error != SSH_OK)
-        return SSH_AUTH_DENIED;
+        goto denied;
     cc->cc_didauth = true;
 
+    success:
+    xTimerDelete(is_timerHndl, 0);
     return SSH_AUTH_SUCCESS;
+
+    denied:
+    if (++pass_try > PASS_TRY)
+        ssh_disconnect(session);
+    return SSH_AUTH_DENIED;
 }
 
 static int data_function(ssh_session session, ssh_channel channel, void *data, uint32_t len,
@@ -216,6 +245,7 @@ static int pty_request(ssh_session session, ssh_channel channel, const char *ter
 }
 
 static int shell_request(ssh_session session, ssh_channel channel, void *userdata) {
+    ESP_LOGI(TAG, "shell request");
     struct client_ctx *cc = (struct client_ctx*) userdata;
     if (cc->cc_didshell)
         return SSH_ERROR;
@@ -224,7 +254,8 @@ static int shell_request(ssh_session session, ssh_channel channel, void *userdat
     cc->cc_is.is_exit = is_exit;
     cc->cc_is.is_reset_timeout = is_reset_timeout;
     cc->cc_begin_interactive_session(&cc->cc_is);
-    start_is_timeout(session);
+    kill_sess_chan = true;
+    start_is_timeout();
     return SSH_OK;
 }
 
@@ -285,7 +316,6 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     long t = 0;
     struct client_ctx *cc = (struct client_ctx *) SSH_CALLOC(1, sizeof(struct client_ctx));
 
-    //cc_local = cc;
     cc->cc_session = ssh_new();
 
     if (ssh_bind_accept(sshbind, cc->cc_session) == SSH_ERROR) {
@@ -299,42 +329,25 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_TIMEOUT, &t);
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_TIMEOUT_USEC, &t);
 
-    /////////////////////////////////////
-    // availables ciphers on mbedcrypt //
-    //                                 //
-    //     aes256-gcm@openssh.com      //
-    //     aes128-gcm@openssh.com      //
-    //     aes256-ctr                  //
-    //     aes192-ctr                  //
-    //     aes128-ctr                  //
-    //     aes256-cbc                  //
-    //     aes192-cbc                  //
-    //     aes128-cbc                  //
-    //     3des-cbc                    //
-    /////////////////////////////////////
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_C_S, "aes128-ctr, aes192-ctr, aes256-ctr,aes128-cbc");
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_S_C, "aes128-ctr, aes192-ctr, aes256-ctr,aes128-cbc");
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_C_S,
+            "aes128-ctr, aes192-ctr, aes256-ctr");
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_S_C,
+            "aes128-ctr, aes192-ctr, aes256-ctr");
 
-    ////////////////////////////////////////
-    // availables MAC hashes on mbedcrypt //
-    //                                    //
-    //     hmac-sha2-256-etm@openssh.com  //
-    //     hmac-sha2-512-etm@openssh.com  //
-    //     hmac-sha1-etm@openssh.com      //
-    //     hmac-sha2-512                  //
-    //     hmac-sha2-256                  //
-    //     hmac-sha1                      //
-    ////////////////////////////////////////
-    /*
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_C_S, "");
-    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_S_C, "");
-    */
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_C_S,
+            "ssh-ed25519, ssh-rsa, aes192-ctr, aes256-ctr, aes128-gcm@openssh.com, aes256-gcm@openssh.com, umac-128-etm@openssh.com");
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_S_C,
+            "ssh-ed25519, ssh-rsa, aes192-ctr, aes256-ctr, aes128-gcm@openssh.com, aes256-gcm@openssh.com, umac-128-etm@openssh.com");
 
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_KEY_EXCHANGE,
             "curve25519-sha256@libssh.org, curve25519-sha256, ecdh-sha2-nistp256, diffie-hellman-group-exchange-sha256, diffie-hellman-group14-sha1, diffie-hellman-group1-sha1, diffie-hellman-group18-sha512, diffie-hellman-group16-sha512");
 
+    //(void) ssh_options_set(cc->cc_session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES, "ecdh-sha2-nistp256, ssh-rsa, rsa-sha2-256, ssh-dss");
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
-            "ecdh-sha2-nistp256, ssh-rsa, rsa-sha2-256, ssh-dss");
+            "ssh-rsa-cert-v01@openssh.com ssh-dss-cert-v01@openssh.com ecdsa-sha2-nistp256-cert-v01@openssh.com ecdsa-sha2-nistp384-cert-v01@openssh.com ecdsa-sha2-nistp521-cert-v01@openssh.com ssh-ed25519-cert-v01@openssh.com ecdsa-sha2-nistp256 ecdsa-sha2-nistp384 ecdsa-sha2-nistp521 ssh-rsa ssh-dss ssh-ed25519");
+
+    (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HOSTKEYS,
+            "ssh-rsa,ssh-dss,ecdh-sha2-nistp256");
 
     if (ssh_handle_key_exchange(cc->cc_session) == SSH_ERROR) {
         ssh_disconnect(cc->cc_session);
@@ -344,6 +357,10 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     SLIST_INSERT_HEAD(&sc->sc_client_head, cc, cc_client_list);
     ssh_event_add_session(sc->sc_sshevent, cc->cc_session);
     ESP_LOGI(TAG, "incoming connection");
+    pass_try = 0;
+    kill_sess_chan = false;
+    is_local_session = cc->cc_session;
+    start_is_timeout();
     return;
     cleanup: ssh_free(cc->cc_session);
     SSH_FREE(cc);
