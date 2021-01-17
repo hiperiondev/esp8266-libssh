@@ -21,9 +21,7 @@ static struct ssh_user hardcoded_example_users[] = {
                 .su_keytype = SSH_KEYTYPE_ED25519,
                 .su_base64_key = "AAAAC3NzaC1lZDI1NTE5AAAAILrLCwnBbitV0fhQyy7PClEDVLbtD3tzmuWX4fU6DuxI"
         },
-        {
-
-        }
+        {}
 };
 
 const char *hardcoded_example_host_key =
@@ -117,7 +115,7 @@ void start_sshd(void) {
     xTaskCreate(
             sshd_task,
             "sshd",
-            9000,
+            10000,
             NULL,
             10,
             NULL

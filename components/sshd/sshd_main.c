@@ -505,6 +505,8 @@ int sshd_main(struct server_ctx *sc) {
     terminate_server(sc);
     ssh_event_free(event);
     ssh_finalize();
+    if (is_timerHndl != NULL)
+        xTimerDelete(is_timerHndl, 0);
     ESP_LOGI(TAG, "END sshd_main");
 
     return SSH_OK;
