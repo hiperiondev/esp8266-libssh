@@ -280,7 +280,8 @@ static int shell_request(ssh_session session, ssh_channel channel, void *userdat
 static int exec_request(ssh_session session, ssh_channel channel, const char *command,
         void *userdata) {
     struct client_ctx *cc = (struct client_ctx*) userdata;
-    if (cc->cc_didshell)
+
+    if (cc->cc_didshell == false)
         return SSH_ERROR;
 
     cc->cc_is.is_handle_char_from_local = sendtochannel;
