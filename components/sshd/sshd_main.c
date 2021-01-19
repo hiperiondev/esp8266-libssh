@@ -62,10 +62,8 @@ static void is_timeout_callback(xTimerHandle pxTimer) {
 }
 
 static int init_is_timeout(void) {
-    if (is_timerHndl != NULL) {
-        ESP_LOGI(TAG, "is timer already init");
-        return 0;
-    }
+    if (is_timerHndl != NULL)
+        return 2;
 
     is_timerHndl = xTimerCreate(
             "is_timer",
@@ -76,7 +74,7 @@ static int init_is_timeout(void) {
             );
 
     if (xTimerStart(is_timerHndl, 0) != pdPASS) {
-        ESP_LOGI(TAG, "ERROR STARTING IS TIMEOUT TIMER");
+        ESP_LOGI(TAG, "error starting is_timeot timer");
         return 1;
     }
 
@@ -345,25 +343,21 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     ssh_set_server_callbacks(cc->cc_session, &sc->sc_server_cb);
     ssh_set_auth_methods(cc->cc_session, sc->sc_auth_methods);
     ssh_set_blocking(cc->cc_session, 0);
+
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_TIMEOUT, &t);
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_TIMEOUT_USEC, &t);
-
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_C_S,
             "aes128-ctr, aes192-ctr, aes256-ctr");
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_CIPHERS_S_C,
             "aes128-ctr, aes192-ctr, aes256-ctr");
-
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_C_S,
             "ssh-ed25519, ssh-rsa, aes192-ctr, aes256-ctr, aes128-gcm@openssh.com, aes256-gcm@openssh.com, umac-128-etm@openssh.com");
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HMAC_S_C,
             "ssh-ed25519, ssh-rsa, aes192-ctr, aes256-ctr, aes128-gcm@openssh.com, aes256-gcm@openssh.com, umac-128-etm@openssh.com");
-
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_KEY_EXCHANGE,
             "curve25519-sha256@libssh.org, curve25519-sha256, ecdh-sha2-nistp256, diffie-hellman-group-exchange-sha256, diffie-hellman-group14-sha1, diffie-hellman-group1-sha1, diffie-hellman-group18-sha512, diffie-hellman-group16-sha512");
-
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
             "ssh-rsa-cert-v01@openssh.com ssh-dss-cert-v01@openssh.com ecdsa-sha2-nistp256-cert-v01@openssh.com ecdsa-sha2-nistp384-cert-v01@openssh.com ecdsa-sha2-nistp521-cert-v01@openssh.com ssh-ed25519-cert-v01@openssh.com ecdsa-sha2-nistp256 ecdsa-sha2-nistp384 ecdsa-sha2-nistp521 ssh-rsa ssh-dss ssh-ed25519");
-
     (void) ssh_options_set(cc->cc_session, SSH_OPTIONS_HOSTKEYS,
             "ssh-rsa,ssh-dss,ecdh-sha2-nistp256");
 
@@ -381,9 +375,11 @@ static void incoming_connection(ssh_bind sshbind, void *userdata) {
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     start_is_timeout();
     return;
-    cleanup: ssh_free(cc->cc_session);
+
+    cleanup:
+    ssh_free(cc->cc_session);
     SSH_FREE(cc);
-    ESP_LOGI(TAG, "EXIT incoming_connection");
+    ESP_LOGI(TAG, "exit incoming_connection");
 }
 
 static void dead_eater(struct server_ctx *sc) {

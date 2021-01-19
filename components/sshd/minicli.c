@@ -12,8 +12,6 @@
 char next_command[16];
 uint8_t next_command_idx = 0;
 
-static void minicli_handle_char(struct interactive_session *is, char c);
-
 static void minicli_command_banner(struct interactive_session*);
 static void minicli_command_help(struct interactive_session*);
 static void minicli_command_status(struct interactive_session*);
